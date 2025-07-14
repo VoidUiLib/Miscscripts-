@@ -1,227 +1,219 @@
--- Eclair Roblox GUI (compact + optimized) by Swimmiel
+-- Eclair GUI HyperPolished™ by Swimmiel (Eman)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
-local UIS = game:GetService("UserInputService")
-
--- Rainbow color generator (hue cycling)
+-- Helper: rainbow hue generator
 local function rainbowColor(t)
-    local hue = (t * 60) % 360
-    return Color3.fromHSV(hue / 360, 1, 1)
+	return Color3.fromHSV((t * 0.25) % 1, 1, 1)
 end
 
--- State
-local guiOpen = true
+-- Helper: Create rounded corner
+local function roundify(inst, rad)
+	local uic = Instance.new("UICorner")
+	uic.CornerRadius = UDim.new(0, rad or 8)
+	uic.Parent = inst
+end
 
--- Create ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "EclairUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+-- Core GUI Setup
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "EclairGUI"
+gui.ResetOnSpawn = false
 
--- Main Frame (smaller)
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 220, 0, 110)
-mainFrame.Position = UDim2.new(0.5, -110, 0.4, -55)
-mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-mainFrame.ClipsDescendants = true
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.Visible = guiOpen
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 240, 0, 160)
+frame.Position = UDim2.new(0.5, -120, 0.45, -80)
+frame.BackgroundColor3 = Color3.new(0,0,0)
+roundify(frame, 10)
 
--- Rounded corners
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+-- Rainbow outline
+local outline = Instance.new("UIStroke", frame)
+outline.Thickness = 3
+outline.Color = Color3.fromRGB(255,0,0)
 
--- Rainbow outline frame
-local outline = Instance.new("Frame")
-outline.Name = "RainbowOutline"
-outline.BackgroundTransparency = 1
-outline.Size = UDim2.new(1, 6, 1, 6)
-outline.Position = UDim2.new(0, -3, 0, -3)
-outline.ZIndex = 0
-outline.Parent = mainFrame
+-- Title
+local title = Instance.new("TextLabel", frame)
+title.Text = "Eclair GUI"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.new(1,1,1)
+title.Size = UDim2.new(1,0,0,28)
+title.BackgroundTransparency = 1
 
-local outlineStroke = Instance.new("UIStroke")
-outlineStroke.Thickness = 3
-outlineStroke.Transparency = 0
-outlineStroke.Parent = outline
-outlineStroke.Color = Color3.fromRGB(255, 0, 0)
+-- Dropdown
+local dropdown = Instance.new("TextButton", frame)
+dropdown.Position = UDim2.new(0, 10, 0, 36)
+dropdown.Size = UDim2.new(0, 100, 0, 26)
+dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+dropdown.TextColor3 = Color3.new(1,1,1)
+dropdown.TextSize = 14
+dropdown.Text = "WalkSpeed"
+dropdown.Font = Enum.Font.Gotham
+roundify(dropdown)
 
--- Title Label
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "Eclair Speed Editor"
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.TextSize = 18
-titleLabel.TextColor3 = Color3.new(1,1,1)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Size = UDim2.new(1, 0, 0, 24)
-titleLabel.Position = UDim2.new(0, 0, 0, 8)
-titleLabel.Parent = mainFrame
-
--- Dropdown Container
-local dropdownFrame = Instance.new("Frame")
-dropdownFrame.Size = UDim2.new(0, 130, 0, 28)
-dropdownFrame.Position = UDim2.new(0, 12, 0, 38)
-dropdownFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-dropdownFrame.Parent = mainFrame
-dropdownFrame.ClipsDescendants = true
-dropdownFrame.ZIndex = 1
-Instance.new("UICorner", dropdownFrame).CornerRadius = UDim.new(0, 6)
-
-local dropdownLabel = Instance.new("TextLabel")
-dropdownLabel.Size = UDim2.new(1, -24, 1, 0)
-dropdownLabel.Position = UDim2.new(0, 8, 0, 0)
-dropdownLabel.BackgroundTransparency = 1
-dropdownLabel.Font = Enum.Font.Gotham
-dropdownLabel.TextSize = 14
-dropdownLabel.TextColor3 = Color3.new(1,1,1)
-dropdownLabel.Text = "WalkSpeed"
-dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-dropdownLabel.Parent = dropdownFrame
-
-local dropdownArrow = Instance.new("TextLabel")
-dropdownArrow.Size = UDim2.new(0, 16, 1, 0)
-dropdownArrow.Position = UDim2.new(1, -20, 0, 0)
-dropdownArrow.BackgroundTransparency = 1
-dropdownArrow.Text = "▼"
-dropdownArrow.TextColor3 = Color3.new(1,1,1)
-dropdownArrow.Font = Enum.Font.GothamBold
-dropdownArrow.TextSize = 18
-dropdownArrow.Parent = dropdownFrame
-
--- Dropdown Options Frame (hidden by default)
-local dropdownOptionsFrame = Instance.new("Frame")
-dropdownOptionsFrame.Size = UDim2.new(0, 130, 0, 56)
-dropdownOptionsFrame.Position = UDim2.new(0, 0, 1, 4)
-dropdownOptionsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-dropdownOptionsFrame.Visible = false
-dropdownOptionsFrame.Parent = dropdownFrame
-dropdownOptionsFrame.ClipsDescendants = true
-dropdownOptionsFrame.ZIndex = 2
-Instance.new("UICorner", dropdownOptionsFrame).CornerRadius = UDim.new(0, 6)
+local optionsFrame = Instance.new("Frame", dropdown)
+optionsFrame.Position = UDim2.new(0, 0, 1, 2)
+optionsFrame.Size = UDim2.new(1, 0, 0, 54)
+optionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+optionsFrame.Visible = false
+roundify(optionsFrame)
 
 local options = {"WalkSpeed", "JumpPower"}
-
-for i, option in ipairs(options) do
-    local optionLabel = Instance.new("TextButton")
-    optionLabel.Size = UDim2.new(1, 0, 0, 28)
-    optionLabel.Position = UDim2.new(0, 0, 0, (i-1)*28)
-    optionLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    optionLabel.AutoButtonColor = false
-    optionLabel.Font = Enum.Font.Gotham
-    optionLabel.TextSize = 14
-    optionLabel.TextColor3 = Color3.new(1,1,1)
-    optionLabel.Text = option
-    optionLabel.Parent = dropdownOptionsFrame
-
-    optionLabel.MouseEnter:Connect(function()
-        optionLabel.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    end)
-    optionLabel.MouseLeave:Connect(function()
-        optionLabel.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    end)
-
-    optionLabel.MouseButton1Click:Connect(function()
-        dropdownLabel.Text = option
-        dropdownOptionsFrame.Visible = false
-        dropdownArrow.Text = "▼"
-    end)
+for i, opt in ipairs(options) do
+	local btn = Instance.new("TextButton", optionsFrame)
+	btn.Size = UDim2.new(1, 0, 0, 26)
+	btn.Position = UDim2.new(0, 0, 0, (i - 1) * 26)
+	btn.Text = opt
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 14
+	btn.MouseButton1Click:Connect(function()
+		dropdown.Text = opt
+		optionsFrame.Visible = false
+	end)
 end
 
--- Toggle dropdown visibility on click
-dropdownFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dropdownOptionsFrame.Visible = not dropdownOptionsFrame.Visible
-        dropdownArrow.Text = dropdownOptionsFrame.Visible and "▲" or "▼"
-    end
+dropdown.MouseButton1Click:Connect(function()
+	optionsFrame.Visible = not optionsFrame.Visible
 end)
 
--- TextBox for input value
-local inputBox = Instance.new("TextBox")
-inputBox.Size = UDim2.new(0, 70, 0, 28)
-inputBox.Position = UDim2.new(0, 155, 0, 38)
-inputBox.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-inputBox.TextColor3 = Color3.new(0, 0, 0)
-inputBox.ClearTextOnFocus = false
-inputBox.PlaceholderText = "Value"
-inputBox.Font = Enum.Font.Gotham
-inputBox.TextSize = 16
-inputBox.Text = ""
-inputBox.Parent = mainFrame
-Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 6)
+-- Textbox
+local input = Instance.new("TextBox", frame)
+input.Position = UDim2.new(0, 120, 0, 36)
+input.Size = UDim2.new(0, 110, 0, 26)
+input.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+input.PlaceholderText = "Enter value"
+input.TextColor3 = Color3.new(0, 0, 0)
+input.Font = Enum.Font.Gotham
+input.TextSize = 14
+roundify(input)
 
--- Apply button
-local applyBtn = Instance.new("TextButton")
-applyBtn.Size = UDim2.new(0, 70, 0, 28)
-applyBtn.Position = UDim2.new(0, 75, 0, 78)
-applyBtn.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-applyBtn.TextColor3 = Color3.new(0, 0, 0)
-applyBtn.Font = Enum.Font.GothamBold
-applyBtn.TextSize = 16
-applyBtn.Text = "Apply"
-applyBtn.Parent = mainFrame
-Instance.new("UICorner", applyBtn).CornerRadius = UDim.new(0, 6)
+-- Tooltip
+local tooltip = Instance.new("TextLabel", frame)
+tooltip.Size = UDim2.new(1, 0, 0, 20)
+tooltip.Position = UDim2.new(0, 0, 1, -20)
+tooltip.BackgroundTransparency = 1
+tooltip.TextColor3 = Color3.fromRGB(200, 200, 200)
+tooltip.TextSize = 13
+tooltip.Font = Enum.Font.Gotham
+tooltip.Text = ""
+tooltip.Visible = false
 
-local applyOutline = Instance.new("UIStroke")
-applyOutline.Thickness = 2
-applyOutline.Color = Color3.fromHSV(0,1,1)
-applyOutline.Parent = applyBtn
+local function showTooltip(text)
+	tooltip.Text = text
+	tooltip.Visible = true
+end
 
--- Rainbow outlines updater (less calls: one RunService Heartbeat for both outlines)
+local function hideTooltip()
+	tooltip.Visible = false
+end
+
+-- Live Preview Toggle
+local previewToggle = Instance.new("TextButton", frame)
+previewToggle.Position = UDim2.new(0, 10, 0, 68)
+previewToggle.Size = UDim2.new(0, 100, 0, 24)
+previewToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+previewToggle.Text = "Live Preview: OFF"
+previewToggle.Font = Enum.Font.Gotham
+previewToggle.TextColor3 = Color3.new(1,1,1)
+previewToggle.TextSize = 13
+roundify(previewToggle)
+
+local livePreview = false
+previewToggle.MouseButton1Click:Connect(function()
+	livePreview = not livePreview
+	previewToggle.Text = "Live Preview: " .. (livePreview and "ON" or "OFF")
+end)
+
+-- Apply Button
+local apply = Instance.new("TextButton", frame)
+apply.Position = UDim2.new(0, 120, 0, 68)
+apply.Size = UDim2.new(0, 50, 0, 24)
+apply.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+apply.Text = "Apply"
+apply.Font = Enum.Font.GothamBold
+apply.TextColor3 = Color3.new(0, 0, 0)
+apply.TextSize = 13
+roundify(apply)
+
+-- Reset Button
+local reset = Instance.new("TextButton", frame)
+reset.Position = UDim2.new(0, 180, 0, 68)
+reset.Size = UDim2.new(0, 50, 0, 24)
+reset.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+reset.Text = "Reset"
+reset.Font = Enum.Font.GothamBold
+reset.TextColor3 = Color3.new(0, 0, 0)
+reset.TextSize = 13
+roundify(reset)
+
+-- Action logic
+local function applyValue()
+	local val = tonumber(input.Text)
+	if not val then return end
+	local char = player.Character or player.CharacterAdded:Wait()
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		if dropdown.Text == "WalkSpeed" then
+			hum.WalkSpeed = val
+		else
+			hum.JumpPower = val
+		end
+	end
+end
+
+apply.MouseButton1Click:Connect(applyValue)
+reset.MouseButton1Click:Connect(function()
+	local char = player.Character or player.CharacterAdded:Wait()
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.WalkSpeed = 16
+		hum.JumpPower = 50
+	end
+end)
+
+-- Live Preview Update
+input:GetPropertyChangedSignal("Text"):Connect(function()
+	if livePreview then
+		applyValue()
+	end
+end)
+
+-- Tooltips
+apply.MouseEnter:Connect(function() showTooltip("Set value to character") end)
+apply.MouseLeave:Connect(hideTooltip)
+reset.MouseEnter:Connect(function() showTooltip("Reset to default") end)
+reset.MouseLeave:Connect(hideTooltip)
+previewToggle.MouseEnter:Connect(function() showTooltip("Toggles live mode") end)
+previewToggle.MouseLeave:Connect(hideTooltip)
+
+-- Rainbow Outline Pulse
 RunService.Heartbeat:Connect(function()
-    local time = tick()
-    local color = rainbowColor(time)
-    applyOutline.Color = color
-    outlineStroke.Color = color
+	local t = tick()
+	outline.Color = rainbowColor(t)
 end)
 
--- Apply action
-applyBtn.MouseButton1Click:Connect(function()
-    local selected = dropdownLabel.Text
-    local val = tonumber(inputBox.Text)
-    if not val then return end
-
-    local char = player.Character
-    if not char then return end
-
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-
-    if selected == "WalkSpeed" then
-        humanoid.WalkSpeed = val
-    elseif selected == "JumpPower" then
-        humanoid.JumpPower = val
-    end
-end)
-
--- Toggle button (small rainbow button)
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleButton"
-toggleBtn.Size = UDim2.new(0, 32, 0, 32)
-toggleBtn.Position = UDim2.new(0, 12, 0, 12)
+-- Rainbow Toggle Button
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.new(0, 36, 0, 36)
+toggleBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleBtn.Text = "≡"
 toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 20
-toggleBtn.Text = "≡"
-toggleBtn.Parent = screenGui
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+toggleBtn.TextSize = 18
+roundify(toggleBtn)
 
-local toggleOutline = Instance.new("UIStroke")
+local toggleOutline = Instance.new("UIStroke", toggleBtn)
 toggleOutline.Thickness = 3
-toggleOutline.Parent = toggleBtn
-
--- Animate toggle outline rainbow with offset for difference
-RunService.Heartbeat:Connect(function()
-    local time = tick() + 1000
-    toggleOutline.Color = rainbowColor(time)
-end)
 
 toggleBtn.MouseButton1Click:Connect(function()
-    guiOpen = not guiOpen
-    mainFrame.Visible = guiOpen
+	frame.Visible = not frame.Visible
+end)
+
+RunService.Heartbeat:Connect(function()
+	toggleOutline.Color = rainbowColor(tick() + 1)
 end)
