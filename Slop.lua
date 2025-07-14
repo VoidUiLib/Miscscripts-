@@ -1,219 +1,234 @@
--- Eclair GUI HyperPolished™ by Swimmiel (Eman)
+-- Eclair Ultimate EXXXXXXXXXXXXXXXXXXXXXXTREME Logic™ 2.0 (Draggable Version)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local player = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local plr = Players.LocalPlayer
 
--- Helper: rainbow hue generator
-local function rainbowColor(t)
-	return Color3.fromHSV((t * 0.25) % 1, 1, 1)
+local lastValues = { WalkSpeed = nil, JumpPower = nil }
+local currentType = "WalkSpeed"
+local livePreview = false
+local applying = false
+
+local function clamp(val, min, max)
+	return math.max(min, math.min(max, val))
 end
 
--- Helper: Create rounded corner
-local function roundify(inst, rad)
-	local uic = Instance.new("UICorner")
-	uic.CornerRadius = UDim.new(0, rad or 8)
-	uic.Parent = inst
-end
-
--- Core GUI Setup
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "EclairGUI"
-gui.ResetOnSpawn = false
-
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 240, 0, 160)
-frame.Position = UDim2.new(0.5, -120, 0.45, -80)
-frame.BackgroundColor3 = Color3.new(0,0,0)
-roundify(frame, 10)
-
--- Rainbow outline
-local outline = Instance.new("UIStroke", frame)
-outline.Thickness = 3
-outline.Color = Color3.fromRGB(255,0,0)
-
--- Title
-local title = Instance.new("TextLabel", frame)
-title.Text = "Eclair GUI"
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-title.TextColor3 = Color3.new(1,1,1)
-title.Size = UDim2.new(1,0,0,28)
-title.BackgroundTransparency = 1
-
--- Dropdown
-local dropdown = Instance.new("TextButton", frame)
-dropdown.Position = UDim2.new(0, 10, 0, 36)
-dropdown.Size = UDim2.new(0, 100, 0, 26)
-dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-dropdown.TextColor3 = Color3.new(1,1,1)
-dropdown.TextSize = 14
-dropdown.Text = "WalkSpeed"
-dropdown.Font = Enum.Font.Gotham
-roundify(dropdown)
-
-local optionsFrame = Instance.new("Frame", dropdown)
-optionsFrame.Position = UDim2.new(0, 0, 1, 2)
-optionsFrame.Size = UDim2.new(1, 0, 0, 54)
-optionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-optionsFrame.Visible = false
-roundify(optionsFrame)
-
-local options = {"WalkSpeed", "JumpPower"}
-for i, opt in ipairs(options) do
-	local btn = Instance.new("TextButton", optionsFrame)
-	btn.Size = UDim2.new(1, 0, 0, 26)
-	btn.Position = UDim2.new(0, 0, 0, (i - 1) * 26)
-	btn.Text = opt
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-	btn.Font = Enum.Font.Gotham
-	btn.TextSize = 14
-	btn.MouseButton1Click:Connect(function()
-		dropdown.Text = opt
-		optionsFrame.Visible = false
+local function flashGui(guiObject, color, duration)
+	duration = duration or 0.3
+	local original = guiObject.BackgroundColor3
+	TweenService:Create(guiObject, TweenInfo.new(duration / 2), { BackgroundColor3 = color }):Play()
+	task.delay(duration / 2, function()
+		TweenService:Create(guiObject, TweenInfo.new(duration / 2), { BackgroundColor3 = original }):Play()
 	end)
 end
 
-dropdown.MouseButton1Click:Connect(function()
-	optionsFrame.Visible = not optionsFrame.Visible
-end)
+-- GUI Core
+local gui = Instance.new("ScreenGui")
+gui.Name = "EclairUltimate"
+gui.ResetOnSpawn = false
+gui.Parent = plr:WaitForChild("PlayerGui")
 
--- Textbox
-local input = Instance.new("TextBox", frame)
-input.Position = UDim2.new(0, 120, 0, 36)
-input.Size = UDim2.new(0, 110, 0, 26)
-input.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-input.PlaceholderText = "Enter value"
-input.TextColor3 = Color3.new(0, 0, 0)
-input.Font = Enum.Font.Gotham
-input.TextSize = 14
-roundify(input)
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 360, 0, 160)
+main.Position = UDim2.new(0.5, -180, 0.5, -80)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+main.BorderSizePixel = 0
+main.Parent = gui
 
--- Tooltip
-local tooltip = Instance.new("TextLabel", frame)
-tooltip.Size = UDim2.new(1, 0, 0, 20)
-tooltip.Position = UDim2.new(0, 0, 1, -20)
-tooltip.BackgroundTransparency = 1
-tooltip.TextColor3 = Color3.fromRGB(200, 200, 200)
-tooltip.TextSize = 13
-tooltip.Font = Enum.Font.Gotham
-tooltip.Text = ""
-tooltip.Visible = false
+local corner = Instance.new("UICorner", main)
+corner.CornerRadius = UDim.new(0, 12)
 
-local function showTooltip(text)
-	tooltip.Text = text
-	tooltip.Visible = true
+-- Dropdown
+local dropdown = Instance.new("TextButton")
+dropdown.Size = UDim2.new(0, 110, 0, 26)
+dropdown.Position = UDim2.new(0, 10, 0, 10)
+dropdown.Text = currentType
+dropdown.Font = Enum.Font.Gotham
+dropdown.TextSize = 14
+dropdown.TextColor3 = Color3.new(1, 1, 1)
+dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+dropdown.Parent = main
+
+local optionsFrame = Instance.new("Frame")
+optionsFrame.Size = UDim2.new(0, 110, 0, 52)
+optionsFrame.Position = UDim2.new(0, 10, 0, 36)
+optionsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+optionsFrame.Visible = false
+optionsFrame.Parent = main
+
+-- Input
+local valueBox = Instance.new("TextBox")
+valueBox.Size = UDim2.new(0, 100, 0, 26)
+valueBox.Position = UDim2.new(0, 130, 0, 10)
+valueBox.PlaceholderText = "Enter Value"
+valueBox.Text = ""
+valueBox.Font = Enum.Font.Gotham
+valueBox.TextSize = 14
+valueBox.TextColor3 = Color3.new(1, 1, 1)
+valueBox.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+valueBox.ClearTextOnFocus = false
+valueBox.Parent = main
+
+-- Speed display
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 100, 0, 20)
+speedLabel.Position = UDim2.new(0, 130, 0, 36)
+speedLabel.BackgroundTransparency = 1
+speedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 13
+speedLabel.Text = ""
+speedLabel.Parent = main
+
+-- Button helper
+local function makeButton(text, posX, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 90, 0, 26)
+	btn.Position = UDim2.new(0, posX, 0, 64)
+	btn.Text = text
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 14
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+	btn.Parent = main
+	btn.MouseButton1Click:Connect(callback)
+	return btn
 end
 
-local function hideTooltip()
-	tooltip.Visible = false
+-- Logic
+local function getHumanoid()
+	local char = plr.Character or plr.CharacterAdded:Wait()
+	return char and char:FindFirstChildOfClass("Humanoid")
 end
 
--- Live Preview Toggle
-local previewToggle = Instance.new("TextButton", frame)
-previewToggle.Position = UDim2.new(0, 10, 0, 68)
-previewToggle.Size = UDim2.new(0, 100, 0, 24)
-previewToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-previewToggle.Text = "Live Preview: OFF"
-previewToggle.Font = Enum.Font.Gotham
-previewToggle.TextColor3 = Color3.new(1,1,1)
-previewToggle.TextSize = 13
-roundify(previewToggle)
-
-local livePreview = false
-previewToggle.MouseButton1Click:Connect(function()
-	livePreview = not livePreview
-	previewToggle.Text = "Live Preview: " .. (livePreview and "ON" or "OFF")
-end)
-
--- Apply Button
-local apply = Instance.new("TextButton", frame)
-apply.Position = UDim2.new(0, 120, 0, 68)
-apply.Size = UDim2.new(0, 50, 0, 24)
-apply.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-apply.Text = "Apply"
-apply.Font = Enum.Font.GothamBold
-apply.TextColor3 = Color3.new(0, 0, 0)
-apply.TextSize = 13
-roundify(apply)
-
--- Reset Button
-local reset = Instance.new("TextButton", frame)
-reset.Position = UDim2.new(0, 180, 0, 68)
-reset.Size = UDim2.new(0, 50, 0, 24)
-reset.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
-reset.Text = "Reset"
-reset.Font = Enum.Font.GothamBold
-reset.TextColor3 = Color3.new(0, 0, 0)
-reset.TextSize = 13
-roundify(reset)
-
--- Action logic
 local function applyValue()
-	local val = tonumber(input.Text)
-	if not val then return end
-	local char = player.Character or player.CharacterAdded:Wait()
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		if dropdown.Text == "WalkSpeed" then
-			hum.WalkSpeed = val
-		else
-			hum.JumpPower = val
-		end
+	if applying then return end
+	applying = true
+
+	local hum = getHumanoid()
+	local val = tonumber(valueBox.Text)
+	if hum and val then
+		lastValues[currentType] = hum[currentType]
+		if currentType == "WalkSpeed" then val = clamp(val, 0, 100)
+		elseif currentType == "JumpPower" then val = clamp(val, 0, 200) end
+		hum[currentType] = val
+		flashGui(main, Color3.fromRGB(0, 150, 255))
 	end
+	applying = false
 end
 
-apply.MouseButton1Click:Connect(applyValue)
-reset.MouseButton1Click:Connect(function()
-	local char = player.Character or player.CharacterAdded:Wait()
-	local hum = char:FindFirstChildOfClass("Humanoid")
+local function resetValue()
+	local hum = getHumanoid()
 	if hum then
+		lastValues.WalkSpeed = hum.WalkSpeed
+		lastValues.JumpPower = hum.JumpPower
 		hum.WalkSpeed = 16
 		hum.JumpPower = 50
+		flashGui(main, Color3.fromRGB(255, 140, 0))
 	end
-end)
+end
 
--- Live Preview Update
-input:GetPropertyChangedSignal("Text"):Connect(function()
-	if livePreview then
+local function undoValue()
+	local hum = getHumanoid()
+	if hum and lastValues[currentType] then
+		hum[currentType] = lastValues[currentType]
+		flashGui(main, Color3.fromRGB(100, 255, 100))
+	end
+end
+
+makeButton("Apply", 10, applyValue)
+makeButton("Reset", 110, resetValue)
+makeButton("Undo", 210, undoValue)
+
+-- Live preview
+valueBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local val = tonumber(valueBox.Text)
+	if val then
+		if currentType == "WalkSpeed" then
+			speedLabel.Text = string.format("%.2f m/s", val / 20)
+		else
+			speedLabel.Text = string.format("%.0f studs", val)
+		end
+	end
+	if livePreview and val then
 		applyValue()
 	end
 end)
 
--- Tooltips
-apply.MouseEnter:Connect(function() showTooltip("Set value to character") end)
-apply.MouseLeave:Connect(hideTooltip)
-reset.MouseEnter:Connect(function() showTooltip("Reset to default") end)
-reset.MouseLeave:Connect(hideTooltip)
-previewToggle.MouseEnter:Connect(function() showTooltip("Toggles live mode") end)
-previewToggle.MouseLeave:Connect(hideTooltip)
+local liveToggle = Instance.new("TextButton")
+liveToggle.Size = UDim2.new(0, 340, 0, 22)
+liveToggle.Position = UDim2.new(0, 10, 0, 120)
+liveToggle.Text = "Live Preview: OFF"
+liveToggle.Font = Enum.Font.Gotham
+liveToggle.TextSize = 13
+liveToggle.TextColor3 = Color3.new(1, 1, 1)
+liveToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+liveToggle.Parent = main
 
--- Rainbow Outline Pulse
-RunService.Heartbeat:Connect(function()
-	local t = tick()
-	outline.Color = rainbowColor(t)
+liveToggle.MouseButton1Click:Connect(function()
+	livePreview = not livePreview
+	liveToggle.Text = "Live Preview: " .. (livePreview and "ON" or "OFF")
 end)
 
--- Rainbow Toggle Button
-local toggleBtn = Instance.new("TextButton", gui)
-toggleBtn.Size = UDim2.new(0, 36, 0, 36)
-toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.Text = "≡"
-toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 18
-roundify(toggleBtn)
-
-local toggleOutline = Instance.new("UIStroke", toggleBtn)
-toggleOutline.Thickness = 3
-
-toggleBtn.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
+-- Dropdown logic
+dropdown.MouseButton1Click:Connect(function()
+	optionsFrame.Visible = not optionsFrame.Visible
 end)
 
-RunService.Heartbeat:Connect(function()
-	toggleOutline.Color = rainbowColor(tick() + 1)
+local function createOption(text, yPos)
+	local opt = Instance.new("TextButton")
+	opt.Size = UDim2.new(1, 0, 0, 26)
+	opt.Position = UDim2.new(0, 0, 0, yPos)
+	opt.Text = text
+	opt.TextColor3 = Color3.new(1, 1, 1)
+	opt.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	opt.Font = Enum.Font.Gotham
+	opt.TextSize = 14
+	opt.Parent = optionsFrame
+	opt.MouseButton1Click:Connect(function()
+		currentType = text
+		dropdown.Text = text
+		optionsFrame.Visible = false
+	end)
+end
+
+createOption("WalkSpeed", 0)
+createOption("JumpPower", 26)
+
+UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		optionsFrame.Visible = false
+	end
+end)
+
+-- DRAGGABLE EXXXXXXXX™
+local dragging, dragInput, dragStart, startPos
+
+main.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+main.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
 end)
