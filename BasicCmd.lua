@@ -1,13 +1,11 @@
 local Players = game:GetService("Players")
-local TextChatService = game:GetService("TextChatService")
+local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
-
-local prefixList = {"/", "!", "+"} -- command prefixes
+local prefixList = {"/", "!", "+"}
 
 -- Commands table
 local commands = {
-
     speed = function(args)
         local speed = tonumber(args[1]) or 16
         local char = localPlayer.Character
@@ -46,7 +44,7 @@ local commands = {
 
                 task.spawn(function()
                     while flying and bodyVelocity.Parent do
-                        bodyVelocity.Velocity = Vector3.new(0,10,0) -- constant slow up movement
+                        bodyVelocity.Velocity = Vector3.new(0,10,0)
                         task.wait(0.1)
                     end
                 end)
@@ -192,7 +190,7 @@ local commands = {
             jumping = not jumping
 
             if jumping then
-                taskConn = game:GetService("RunService").Heartbeat:Connect(function()
+                taskConn = RunService.Heartbeat:Connect(function()
                     if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
                         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
                     end
@@ -207,7 +205,6 @@ local commands = {
             end
         end
     end)(),
-
 }
 
 -- Utility: check if message starts with any prefix, return prefix or nil
@@ -251,18 +248,41 @@ localPlayer.Chatted:Connect(function(msg)
     handleCommand(msg)
 end)
 
--- Listen to TextChatService's OnIncomingMessage (new Roblox chat)
-if TextChatService and TextChatService.OnIncomingMessage then
-    TextChatService.OnIncomingMessage:Connect(function(textMessage)
-        if textMessage.TextSource and textMessage.Text then
-            if textMessage.TextSource.UserId == localPlayer.UserId then
-                handleCommand(textMessage.Text)
+-- Hook the new Roblox Chat TextBox to catch messages typed in new chat (mobile-compatible)
+do
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    local chatGui = playerGui:WaitForChild("Chat", 5)
+    if chatGui then
+        local chatFrame = chatGui:WaitForChild("ChatChannelParentFrame", 5)
+        if chatFrame then
+            -- Recursive search for TextBox inside chatFrame
+            local function findTextBox(gui)
+                for _, child in pairs(gui:GetChildren()) do
+                    if child:IsA("TextBox") then
+                        return child
+                    else
+                        local found = findTextBox(child)
+                        if found then return found end
+                    end
+                end
+                return nil
+            end
+            local textBox = findTextBox(chatFrame)
+            if textBox then
+                textBox.FocusLost:Connect(function(enterPressed)
+                    if enterPressed then
+                        local msg = textBox.Text
+                        if msg and msg ~= "" then
+                            handleCommand(msg)
+                        end
+                    end
+                end)
             end
         end
-    end)
+    end
 end
 
-print("Mobile-friendly chat command parser loaded with commands:")
+print("Mobile-compatible chat command parser loaded with commands:")
 for k in pairs(commands) do
     print(" -", k)
 end
