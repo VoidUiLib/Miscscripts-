@@ -1,8 +1,45 @@
---// ChocoKernel Terminal v1.1 with Linux-style Topbar
+--// ChocoKernel Terminal v1.2  
 --// Launch Code: CHK-BOOTSPLASH-33X
 
 local Players = game:GetService("Players")
 local plr = Players.LocalPlayer
+
+-- Utility JSON encode/decode (basic)
+local function encodeJSON(tbl)
+    local success, json = pcall(function()
+        return game:GetService("HttpService"):JSONEncode(tbl)
+    end)
+    return success and json or "{}"
+end
+local function decodeJSON(str)
+    local success, tbl = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(str)
+    end)
+    return success and tbl or {}
+end
+
+-- Folders & Config
+local installDir = "Workspace/Apt/"
+local configPath = installDir .. "config.json"
+if not isfolder(installDir) then
+    makefolder(installDir)
+end
+
+-- Load saved hardware mode from config or default AMD
+local config = {}
+if isfile(configPath) then
+    local contents = readfile(configPath)
+    config = decodeJSON(contents)
+end
+local hardwareMode = config.hardwareMode or "AMD"
+
+-- Package registry
+local Registry = {
+    eclair  = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/Slop.lua",
+    explus  = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/Misc1.lua",
+    blume   = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/Flag.lua",
+    admin   = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/BasicCmd.lua"
+}
 
 -- Create UI
 local screen = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
@@ -107,8 +144,29 @@ terminalText.BackgroundTransparency = 1
 terminalText.Font = Enum.Font.Code
 terminalText.TextColor3 = Color3.fromRGB(0, 255, 0)
 terminalText.TextSize = 14
-terminalText.Text = "[choco@kernel ~]$ "
 terminalText.TextWrapped = true
+
+-- Hardware specs text for modes
+local hardwareSpecs = {
+    Intel = [[
+CPU: Intel Core i7-10700K
+GPU: NVIDIA RTX 2080 Ti
+RAM: 32GB DDR4
+OS: ChocoLinux 1.0
+]],
+    AMD = [[
+CPU: AMD Ryzen 7 7800X3D
+GPU: Radeon RX 6600
+RAM: 32GB DDR5
+OS: ChocoLinux 1.0
+]],
+    Joke = [[
+CPU: Intel i8 8700X3D
+GPU: GTX 6600XT
+RAM: 48GB DDR9
+OS: ChocoLinux Joke Edition
+]]
+}
 
 -- Input box
 local inputBox = Instance.new("TextBox", contentFrame)
@@ -125,21 +183,40 @@ inputBox.Text = ""
 local inputUICorner = Instance.new("UICorner", inputBox)
 inputUICorner.CornerRadius = UDim.new(0, 4)
 
--- Function to log to terminal
+-- Initial terminal text with hardware specs
+terminalText.Text = (hardwareSpecs[hardwareMode] or hardwareSpecs.AMD) .. "\n[choco@kernel ~]$ "
+
+-- Button functionality
+minimizeBtn.MouseButton1Click:Connect(function()
+    contentFrame.Visible = not contentFrame.Visible
+    minimizeBtn.Text = contentFrame.Visible and "-" or "+"
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screen:Destroy()
+end)
+
+-- Logger function
 local function log(text)
-    terminalText.Text = terminalText.Text .. "\n[choco@kernel ~]$ " .. text
+    local base = terminalText.Text:gsub("_$", "")
+    terminalText.Text = base .. "\n[choco@kernel ~]$ " .. text
 end
 
--- Registry of scripts (can expand)
-local Registry = {
-    eclair = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/Slop.lua",
-    explus = "https://raw.githubusercontent.com/VoidUiLib/Miscscripts-/refs/heads/main/Misc1.lua"
-}
+-- Save hardware mode to config file
+local function saveConfig()
+    config.hardwareMode = hardwareMode
+    local success, err = pcall(function()
+        writefile(configPath, encodeJSON(config))
+    end)
+    if not success then
+        log("Failed to save config: " .. tostring(err))
+    end
+end
 
 -- Command runner logic
 local function runCommand(cmd)
     local args = string.split(cmd, " ")
-    local main = args[1]:lower()
+    local main = args[1] and args[1]:lower() or ""
     local param1 = args[2] and args[2]:lower()
     local param2 = args[3] and args[3]:lower()
 
@@ -150,63 +227,114 @@ local function runCommand(cmd)
                     return game:HttpGet(Registry[param2])
                 end)
                 if success then
-                    writefile("Workspace/RbxOS/ChocoKernel/"..param2..".lua", result)
-                    log("Package '"..param2.."' installed successfully.")
+                    if not isfolder(installDir) then
+                        makefolder(installDir)
+                    end
+                    writefile(installDir .. param2 .. ".lua", result)
+                    log("Package '" .. param2 .. "' installed successfully.")
                 else
-                    log("Failed to install '"..param2.."': "..tostring(result))
+                    log("Failed to install '" .. param2 .. "': " .. tostring(result))
                 end
             else
-                log("Unknown package: "..tostring(param2))
+                log("Unknown package: " .. tostring(param2))
             end
         elseif param1 == "run" and param2 then
-            local path = "Workspace/RbxOS/ChocoKernel/"..param2..".lua"
+            local path = installDir .. param2 .. ".lua"
             if isfile(path) then
                 local chunk = readfile(path)
                 local success, err = pcall(function()
                     loadstring(chunk)()
                 end)
                 if success then
-                    log("Running '"..param2.."'...")
+                    log("Running '" .. param2 .. "'...")
                 else
-                    log("Error running '"..param2.."': "..err)
+                    log("Error running '" .. param2 .. "': " .. err)
                 end
             else
-                log("Package not found. Use 'choco get "..param2.."' first.")
+                log("Package not found. Use 'choco get " .. param2 .. "' first.")
+            end
+        elseif param1 == "set" and param2 then
+            local modes = {intel = true, amd = true, joke = true}
+            if modes[param2] then
+                hardwareMode = param2:sub(1,1):upper() .. param2:sub(2) -- Capitalize first letter
+                saveConfig()
+                log("Hardware mode set to " .. hardwareMode .. ". Restart to apply.")
+            else
+                log("Unknown hardware mode. Available: Intel, AMD, Joke")
             end
         else
-            log("Unknown subcommand or missing argument.")
+            log("Unknown subcommand or missing argument. Use 'help' for commands.")
         end
+
+    elseif main == "ls" then
+        if not isfolder(installDir) then
+            log("No packages installed.")
+            return
+        end
+        local files = listfiles(installDir)
+        if #files == 0 then
+            log("No packages installed.")
+            return
+        end
+        local names = {}
+        for _, f in ipairs(files) do
+            local filename = f:match("([^/\\]+)%.lua$")
+            if filename then
+                table.insert(names, filename)
+            end
+        end
+        log("Installed packages:\n" .. table.concat(names, ", "))
+
+    elseif main == "rm" then
+        if not param1 then
+            log("Usage: rm <package>")
+            return
+        end
+        local path = installDir .. param1 .. ".lua"
+        if isfile(path) then
+            delfile(path)
+            log("Removed package '" .. param1 .. "'.")
+        else
+            log("Package '" .. param1 .. "' not found.")
+        end
+
     elseif main == "clear" then
-        terminalText.Text = "[choco@kernel ~]$ "
+        terminalText.Text = (hardwareSpecs[hardwareMode] or hardwareSpecs.AMD) .. "\n[choco@kernel ~]$ "
+
     elseif main == "help" then
         log("Available commands:")
         log(" - choco get <package>")
         log(" - choco run <package>")
+        log(" - choco set <Intel|AMD|Joke>")
+        log(" - ls")
+        log(" - rm <package>")
         log(" - clear")
         log(" - help")
+
     else
-        log("Unknown command: "..main)
+        log("Unknown command: " .. main)
     end
 end
-
--- Button functionality
-minimizeBtn.MouseButton1Click:Connect(function()
-    contentFrame.Visible = not contentFrame.Visible
-    if contentFrame.Visible then
-        minimizeBtn.Text = "-"
-    else
-        minimizeBtn.Text = "+"
-    end
-end)
-
-closeBtn.MouseButton1Click:Connect(function()
-    screen:Destroy()
-end)
 
 -- Input handler
 inputBox.FocusLost:Connect(function(enter)
     if enter and inputBox.Text ~= "" then
         runCommand(inputBox.Text)
         inputBox.Text = ""
+    end
+end)
+
+-- Blinking cursor effect
+local showCursor = true
+spawn(function()
+    while screen.Parent do
+        local baseText = terminalText.Text:gsub("_$", "")
+        if showCursor then
+            terminalText.Text = baseText .. "_"
+        else
+            terminalText.Text = baseText
+        end
+        showCursor = not showCursor
+        task.wait(0.6)
     end
 end)
