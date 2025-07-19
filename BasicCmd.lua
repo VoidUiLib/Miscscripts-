@@ -1,288 +1,195 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local TextChatService = game:GetService("TextChatService")
+local LocalPlayer = Players.LocalPlayer
+local prefix = ";"
+local commands = {}
+local aliases = {}
 
-local localPlayer = Players.LocalPlayer
-local prefixList = {"/", "!", "+"}
+-- swim toggle flag
+local swimEnabled = false
 
--- Commands table
-local commands = {
-    speed = function(args)
-        local speed = tonumber(args[1]) or 16
-        local char = localPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.WalkSpeed = speed
-            print("WalkSpeed set to", speed)
+local function notify(msg, dur)
+    StarterGui:SetCore("SendNotification", {
+        Title = "iCMD",
+        Text = msg,
+        Duration = dur or 4
+    })
+end
+
+local function parseArgs(text)
+    local t = {}
+    for word in text:gmatch("%S+") do
+        table.insert(t, word)
+    end
+    return t
+end
+
+local function runCommand(msg)
+    if not msg or msg:sub(1, #prefix) ~= prefix then return end
+    local args = parseArgs(msg:sub(#prefix + 1))
+    local cmd = table.remove(args, 1):lower()
+    if aliases[cmd] then cmd = aliases[cmd] end
+    local fn = commands[cmd]
+    if fn then
+        local ok, err = pcall(function()
+            fn(args)
+        end)
+        if not ok then
+            notify("Error: " .. tostring(err), 3)
         end
-    end,
+    else
+        notify("Unknown command: " .. cmd, 2)
+    end
+end
 
-    jump = function(args)
-        local jumpPower = tonumber(args[1]) or 50
-        local char = localPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.JumpPower = jumpPower
-            print("JumpPower set to", jumpPower)
+-- Legacy Chat support
+LocalPlayer.Chatted:Connect(runCommand)
+
+-- TextChatService support (RBXGeneral only)
+local general = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+if general then
+    general.OnIncomingMessage = function(msg)
+        if msg.TextSource and msg.TextSource.UserId == LocalPlayer.UserId then
+            runCommand(msg.Text)
         end
-    end,
+    end
+end
 
-    fly = (function()
-        local flying = false
-        local bodyVelocity
+-- Commands:
 
-        return function(args)
-            local char = localPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
+commands["walkspeed"] = function(args)
+    local val = tonumber(args[1])
+    if val then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum.WalkSpeed = val
+            notify("WalkSpeed = " .. val)
+        end
+    end
+end
 
-            flying = not flying
+commands["jump"] = commands["jp"] = function(args)
+    local val = tonumber(args[1])
+    if val then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum.JumpPower = val
+            notify("JumpPower = " .. val)
+        end
+    end
+end
 
-            if flying then
-                bodyVelocity = Instance.new("BodyVelocity")
-                bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
-                bodyVelocity.Velocity = Vector3.new(0,0,0)
-                bodyVelocity.Parent = hrp
-                print("Fly enabled")
+commands["prefix"] = function(args)
+    local newPrefix = args[1]
+    if newPrefix and #newPrefix == 1 then
+        prefix = newPrefix
+        notify("Prefix set to '" .. newPrefix .. "'")
+    else
+        notify("Prefix must be 1 character")
+    end
+end
 
-                task.spawn(function()
-                    while flying and bodyVelocity.Parent do
-                        bodyVelocity.Velocity = Vector3.new(0,10,0)
-                        task.wait(0.1)
-                    end
-                end)
+commands["swim"] = function()
+    local char = LocalPlayer.Character
+    if not char then return notify("Character missing") end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return notify("Humanoid missing") end
 
-            else
-                if bodyVelocity then
-                    bodyVelocity:Destroy()
-                    bodyVelocity = nil
+    if swimEnabled then
+        return notify("Already swimming")
+    end
+
+    swimEnabled = true
+    workspace.Gravity = 0
+    for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+        hum:SetStateEnabled(state, false)
+    end
+    hum:ChangeState(Enum.HumanoidStateType.Swimming)
+    notify("Swim mode enabled")
+end
+
+commands["unswim"] = function()
+    local char = LocalPlayer.Character
+    if not char then return notify("Character missing") end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return notify("Humanoid missing") end
+
+    if not swimEnabled then
+        return notify("Swim not active")
+    end
+
+    swimEnabled = false
+    workspace.Gravity = 196.2
+    for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+        hum:SetStateEnabled(state, true)
+    end
+    hum:ChangeState(Enum.HumanoidStateType.Running)
+    notify("Swim mode disabled")
+end
+
+commands["airswim"] = (function()
+    local enabled = false
+    local bv = nil
+    return function()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return notify("No HRP") end
+        enabled = not enabled
+        if enabled then
+            bv = Instance.new("BodyVelocity")
+            bv.Velocity = Vector3.new(0, 3, 0)
+            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+            bv.Parent = hrp
+            notify("AirSwim enabled")
+            task.spawn(function()
+                while enabled and bv and bv.Parent do
+                    bv.Velocity = Vector3.new(0, 3, 0)
+                    task.wait(0.1)
                 end
-                print("Fly disabled")
-            end
-        end
-    end)(),
-
-    airswim = (function()
-        local swimming = false
-        local bodyVelocity
-
-        return function(args)
-            local char = localPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            swimming = not swimming
-
-            if swimming then
-                bodyVelocity = Instance.new("BodyVelocity")
-                bodyVelocity.MaxForce = Vector3.new(1e4,1e4,1e4)
-                bodyVelocity.Velocity = Vector3.new(0,3,0)
-                bodyVelocity.Parent = hrp
-                print("AirSwim enabled")
-
-                task.spawn(function()
-                    while swimming and bodyVelocity.Parent do
-                        bodyVelocity.Velocity = Vector3.new(0,3,0)
-                        task.wait(0.1)
-                    end
-                end)
-            else
-                if bodyVelocity then
-                    bodyVelocity:Destroy()
-                    bodyVelocity = nil
-                end
-                print("AirSwim disabled")
-            end
-        end
-    end)(),
-
-    noclip = (function()
-        local noclipEnabled = false
-
-        return function(args)
-            noclipEnabled = not noclipEnabled
-            local char = localPlayer.Character
-            if not char then return end
-
-            for _, part in pairs(char:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = not noclipEnabled
-                end
-            end
-            print("Noclip", noclipEnabled and "enabled" or "disabled")
-        end
-    end)(),
-
-    tp = function(args)
-        local targetName = args[1]
-        if not targetName then return print("Usage: tp <playername>") end
-
-        local targetPlayer = Players:FindFirstChild(targetName)
-        local char = localPlayer.Character
-        if targetPlayer and targetPlayer.Character and char and char:FindFirstChild("HumanoidRootPart") and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            char.HumanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
-            print("Teleported to", targetName)
+            end)
         else
-            print("Player not found or missing character")
-        end
-    end,
-
-    sit = (function()
-        local sitting = false
-        return function(args)
-            local char = localPlayer.Character
-            if char and char:FindFirstChild("Humanoid") then
-                sitting = not sitting
-                char.Humanoid.Sit = sitting
-                print(sitting and "Sitting down" or "Standing up")
-            end
-        end
-    end)(),
-
-    reset = function(args)
-        local char = localPlayer.Character
-        if char then
-            char:BreakJoints()
-            print("Character reset")
-        end
-    end,
-
-    shield = (function()
-        local shieldPart
-        return function(args)
-            local char = localPlayer.Character
-            if not char then return end
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if not root then return end
-
-            if shieldPart and shieldPart.Parent then
-                shieldPart:Destroy()
-                shieldPart = nil
-                print("Shield disabled")
-            else
-                shieldPart = Instance.new("Part")
-                shieldPart.Shape = Enum.PartType.Ball
-                shieldPart.Size = Vector3.new(6,6,6)
-                shieldPart.Transparency = 0.5
-                shieldPart.Anchored = false
-                shieldPart.CanCollide = false
-                shieldPart.Material = Enum.Material.Neon
-                shieldPart.Color = Color3.fromRGB(0, 170, 255)
-                shieldPart.Parent = char
-
-                local weld = Instance.new("WeldConstraint")
-                weld.Part0 = root
-                weld.Part1 = shieldPart
-                weld.Parent = shieldPart
-
-                print("Shield enabled")
-            end
-        end
-    end)(),
-
-    autojump = (function()
-        local jumping = false
-        local taskConn
-
-        return function(args)
-            local char = localPlayer.Character
-            if not char then return end
-            local humanoid = char:FindFirstChild("Humanoid")
-            if not humanoid then return end
-
-            jumping = not jumping
-
-            if jumping then
-                taskConn = RunService.Heartbeat:Connect(function()
-                    if humanoid and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    end
-                end)
-                print("Auto jump enabled")
-            else
-                if taskConn then
-                    taskConn:Disconnect()
-                    taskConn = nil
-                end
-                print("Auto jump disabled")
-            end
-        end
-    end)(),
-}
-
--- Utility: check if message starts with any prefix, return prefix or nil
-local function getPrefix(msg)
-    for _, prefix in ipairs(prefixList) do
-        if msg:sub(1, #prefix) == prefix then
-            return prefix
+            if bv then bv:Destroy() end
+            notify("AirSwim disabled")
         end
     end
-    return nil
-end
+end)()
 
--- Parse command from message string
-local function parseCommand(msg)
-    local prefix = getPrefix(msg)
-    if not prefix then return end
-    local content = msg:sub(#prefix + 1)
-    local split = {}
-    for word in content:gmatch("%S+") do
-        table.insert(split, word)
+commands["fly"] = (function()
+    local enabled = false
+    local bv = nil
+    return function()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return notify("No HRP") end
+        enabled = not enabled
+        if enabled then
+            bv = Instance.new("BodyVelocity")
+            bv.Velocity = Vector3.new(0, 10, 0)
+            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+            bv.Parent = hrp
+            notify("Fly enabled")
+        else
+            if bv then bv:Destroy() end
+            notify("Fly disabled")
+        end
     end
-    local cmd = split[1] and split[1]:lower()
-    if not cmd then return end
-    local args = {}
-    for i = 2, #split do
-        table.insert(args, split[i])
-    end
-    return cmd, args
-end
+end)()
 
--- Handle command if it exists
-local function handleCommand(msg)
-    local cmd, args = parseCommand(msg)
-    if cmd and commands[cmd] then
-        commands[cmd](args)
+commands["sit"] = function()
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if hum then
+        hum.Sit = true
+        notify("Sitting")
     end
 end
 
--- Listen to Legacy Player.Chatted event
-localPlayer.Chatted:Connect(function(msg)
-    handleCommand(msg)
-end)
-
--- Hook the new Roblox Chat TextBox to catch messages typed in new chat (mobile-compatible)
-do
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
-    local chatGui = playerGui:WaitForChild("Chat", 5)
-    if chatGui then
-        local chatFrame = chatGui:WaitForChild("ChatChannelParentFrame", 5)
-        if chatFrame then
-            -- Recursive search for TextBox inside chatFrame
-            local function findTextBox(gui)
-                for _, child in pairs(gui:GetChildren()) do
-                    if child:IsA("TextBox") then
-                        return child
-                    else
-                        local found = findTextBox(child)
-                        if found then return found end
-                    end
-                end
-                return nil
-            end
-            local textBox = findTextBox(chatFrame)
-            if textBox then
-                textBox.FocusLost:Connect(function(enterPressed)
-                    if enterPressed then
-                        local msg = textBox.Text
-                        if msg and msg ~= "" then
-                            handleCommand(msg)
-                        end
-                    end
-                end)
-            end
-        end
+commands["reset"] = function()
+    local char = LocalPlayer.Character
+    if char then
+        char:BreakJoints()
+        notify("Character reset")
     end
 end
 
-print("Mobile-compatible chat command parser loaded with commands:")
-for k in pairs(commands) do
-    print(" -", k)
-end
+print("iCMD loaded successfully")
