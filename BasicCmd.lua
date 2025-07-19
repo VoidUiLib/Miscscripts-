@@ -1,195 +1,141 @@
+-- ChocoKernel iCMD v1.2 (Mobile-Ready Command System)
+-- Author: Swimmiel
+-- EXXXXXXXXXXXXXXXXXXXXXXTREME LOGIC™
+
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
-local LocalPlayer = Players.LocalPlayer
-local prefix = ";"
+
+local lp = Players.LocalPlayer
+local char, hrp, hum
+
+-- Refs auto updater
+local function refresh()
+	char = lp.Character or lp.CharacterAdded:Wait()
+	hrp = char:WaitForChild("HumanoidRootPart")
+	hum = char:WaitForChild("Humanoid")
+end
+refresh()
+
+-- Chat connection
+local function hookChat(callback)
+	-- Legacy Chat
+	lp.Chatted:Connect(callback)
+
+	-- TextChatService Hook
+	if TextChatService.TextChannels then
+		local channel = TextChatService.TextChannels.RBXGeneral or TextChatService:FindFirstChildOfClass("TextChannel")
+		if channel then
+			channel.OnIncomingMessage = function(message)
+				if message.TextSource and message.TextSource.UserId == lp.UserId then
+					callback(message.Text)
+				end
+			end
+		end
+	end
+end
+
+-- Command logic
 local commands = {}
-local aliases = {}
 
--- swim toggle flag
-local swimEnabled = false
+commands.swim = function()
+	refresh()
+	local root = hrp
+	if not root then return end
 
-local function notify(msg, dur)
-    StarterGui:SetCore("SendNotification", {
-        Title = "iCMD",
-        Text = msg,
-        Duration = dur or 4
-    })
+	-- Enable Swimming physics
+	hum:ChangeState(Enum.HumanoidStateType.Swimming)
+
+	local swimVelocity = Vector3.new(0, 4, 0)
+	local swimLoop = RunService.RenderStepped:Connect(function()
+		pcall(function()
+			root.Velocity = swimVelocity
+		end)
+	end)
+
+	StarterGui:SetCore("ChatMakeSystemMessage", {
+		Text = "[iCMD]: Swimming enabled.",
+		Color = Color3.fromRGB(0, 255, 255)
+	})
 end
 
-local function parseArgs(text)
-    local t = {}
-    for word in text:gmatch("%S+") do
-        table.insert(t, word)
-    end
-    return t
+commands.noclip = function()
+	refresh()
+	local con
+	con = RunService.Stepped:Connect(function()
+		for _, v in pairs(char:GetDescendants()) do
+			if v:IsA("BasePart") and v.CanCollide then
+				v.CanCollide = false
+			end
+		end
+	end)
+
+	StarterGui:SetCore("ChatMakeSystemMessage", {
+		Text = "[iCMD]: Noclip enabled.",
+		Color = Color3.fromRGB(255, 255, 255)
+	})
 end
 
-local function runCommand(msg)
-    if not msg or msg:sub(1, #prefix) ~= prefix then return end
-    local args = parseArgs(msg:sub(#prefix + 1))
-    local cmd = table.remove(args, 1):lower()
-    if aliases[cmd] then cmd = aliases[cmd] end
-    local fn = commands[cmd]
-    if fn then
-        local ok, err = pcall(function()
-            fn(args)
-        end)
-        if not ok then
-            notify("Error: " .. tostring(err), 3)
-        end
-    else
-        notify("Unknown command: " .. cmd, 2)
-    end
+commands.ws = function(args)
+	refresh()
+	local speed = tonumber(args[2])
+	if speed and hum then
+		hum.WalkSpeed = speed
+		StarterGui:SetCore("ChatMakeSystemMessage", {
+			Text = "[iCMD]: WalkSpeed set to " .. speed,
+			Color = Color3.fromRGB(0, 255, 0)
+		})
+	end
 end
 
--- Legacy Chat support
-LocalPlayer.Chatted:Connect(runCommand)
-
--- TextChatService support (RBXGeneral only)
-local general = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-if general then
-    general.OnIncomingMessage = function(msg)
-        if msg.TextSource and msg.TextSource.UserId == LocalPlayer.UserId then
-            runCommand(msg.Text)
-        end
-    end
+commands.jp = function(args)
+	refresh()
+	local power = tonumber(args[2])
+	if power and hum then
+		hum.JumpPower = power
+		StarterGui:SetCore("ChatMakeSystemMessage", {
+			Text = "[iCMD]: JumpPower set to " .. power,
+			Color = Color3.fromRGB(255, 215, 0)
+		})
+	end
 end
 
--- Commands:
+-- Parser
+local prefix = "+"
+local function onCommand(msg)
+	if not msg:lower():sub(1, #prefix) == prefix then return end
 
-commands["walkspeed"] = function(args)
-    local val = tonumber(args[1])
-    if val then
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            hum.WalkSpeed = val
-            notify("WalkSpeed = " .. val)
-        end
-    end
+	local split = msg:lower():split(" ")
+	local cmd = split[1]:sub(#prefix + 1)
+
+	if commands[cmd] then
+		pcall(function()
+			commands[cmd](split)
+		end)
+	end
 end
 
-commands["jump"] = commands["jp"] = function(args)
-    local val = tonumber(args[1])
-    if val then
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            hum.JumpPower = val
-            notify("JumpPower = " .. val)
-        end
-    end
-end
+-- Hook the chats
+hookChat(onCommand)
 
-commands["prefix"] = function(args)
-    local newPrefix = args[1]
-    if newPrefix and #newPrefix == 1 then
-        prefix = newPrefix
-        notify("Prefix set to '" .. newPrefix .. "'")
-    else
-        notify("Prefix must be 1 character")
-    end
-end
+-- UI boot button (for ChocoKernel)
+local btn = Instance.new("TextButton")
+btn.Text = "💻 Boot iCMD"
+btn.Size = UDim2.new(0, 120, 0, 40)
+btn.Position = UDim2.new(0, 10, 1, -50)
+btn.AnchorPoint = Vector2.new(0, 1)
+btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+btn.TextColor3 = Color3.fromRGB(0, 255, 127)
+btn.TextScaled = true
+btn.Font = Enum.Font.Code
+btn.ZIndex = 10000
+btn.Visible = true
+btn.Parent = game.CoreGui or lp:WaitForChild("PlayerGui")
 
-commands["swim"] = function()
-    local char = LocalPlayer.Character
-    if not char then return notify("Character missing") end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return notify("Humanoid missing") end
-
-    if swimEnabled then
-        return notify("Already swimming")
-    end
-
-    swimEnabled = true
-    workspace.Gravity = 0
-    for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
-        hum:SetStateEnabled(state, false)
-    end
-    hum:ChangeState(Enum.HumanoidStateType.Swimming)
-    notify("Swim mode enabled")
-end
-
-commands["unswim"] = function()
-    local char = LocalPlayer.Character
-    if not char then return notify("Character missing") end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return notify("Humanoid missing") end
-
-    if not swimEnabled then
-        return notify("Swim not active")
-    end
-
-    swimEnabled = false
-    workspace.Gravity = 196.2
-    for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
-        hum:SetStateEnabled(state, true)
-    end
-    hum:ChangeState(Enum.HumanoidStateType.Running)
-    notify("Swim mode disabled")
-end
-
-commands["airswim"] = (function()
-    local enabled = false
-    local bv = nil
-    return function()
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return notify("No HRP") end
-        enabled = not enabled
-        if enabled then
-            bv = Instance.new("BodyVelocity")
-            bv.Velocity = Vector3.new(0, 3, 0)
-            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-            bv.Parent = hrp
-            notify("AirSwim enabled")
-            task.spawn(function()
-                while enabled and bv and bv.Parent do
-                    bv.Velocity = Vector3.new(0, 3, 0)
-                    task.wait(0.1)
-                end
-            end)
-        else
-            if bv then bv:Destroy() end
-            notify("AirSwim disabled")
-        end
-    end
-end)()
-
-commands["fly"] = (function()
-    local enabled = false
-    local bv = nil
-    return function()
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return notify("No HRP") end
-        enabled = not enabled
-        if enabled then
-            bv = Instance.new("BodyVelocity")
-            bv.Velocity = Vector3.new(0, 10, 0)
-            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-            bv.Parent = hrp
-            notify("Fly enabled")
-        else
-            if bv then bv:Destroy() end
-            notify("Fly disabled")
-        end
-    end
-end)()
-
-commands["sit"] = function()
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-    if hum then
-        hum.Sit = true
-        notify("Sitting")
-    end
-end
-
-commands["reset"] = function()
-    local char = LocalPlayer.Character
-    if char then
-        char:BreakJoints()
-        notify("Character reset")
-    end
-end
-
-print("iCMD loaded successfully")
+btn.MouseButton1Click:Connect(function()
+	StarterGui:SetCore("ChatMakeSystemMessage", {
+		Text = "[iCMD]: Boot successful. Type +cmd",
+		Color = Color3.fromRGB(0, 255, 127)
+	})
+end)
